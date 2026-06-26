@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SolarTrack PID - Simulasi Pelacak Matahari (Protected)</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js for real-time visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #334155;
+        }
+
+        /* Wind Animation lines */
+        @keyframes sweepWind {
+            0% { transform: translateX(-150%) translateY(0); opacity: 0; }
+            30% { opacity: 0.7; }
+            70% { opacity: 0.7; }
+            100% { transform: translateX(150%) translateY(10px); opacity: 0; }
+        }
+        .wind-line {
+            position: absolute;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.4), transparent);
+            border-radius: 9999px;
+            pointer-events: none;
+            z-index: 2;
+        }
+        .wind-line-1 { width: 120px; top: 15%; animation: sweepWind 1.2s infinite linear; }
+        .wind-line-2 { width: 180px; top: 40%; animation: sweepWind 0.9s infinite linear; animation-delay: 0.2s; }
+        .wind-line-3 { width: 150px; top: 65%; animation: sweepWind 1.5s infinite linear; animation-delay: 0.5s; }
+
+        /* Disable user selection */
+        body {
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen flex flex-col">
+
+    <!-- Main Content App (Terbuka Langsung Tanpa Password) -->
+    <div id="main-application" class="flex-grow flex flex-col">
+        <!-- Header / Navbar -->
+        <header class="bg-slate-900 border-b border-slate-800 sticky top-0 z-50 px-6 py-4">
+            <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="bg-amber-500 text-slate-950 p-2.5 rounded-xl shadow-lg shadow-amber-500/20">
+                        <i class="fa-solid fa-solar-panel text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold tracking-tight bg-gradient-to-r from-amber-400 via-orange-400 to-yellow-500 bg-clip-text text-transparent">
+                            SolarTrack PID
+                        </h1>
+                        <p class="text-xs text-slate-400">Proyek KBK: <strong class="text-amber-400">Ahmad Irfan Fardani</strong> (EK3B / 3.32.23.1.02)</p>
+                    </div>
+                </div>
+                
+                <!-- Navigation Tabs -->
+                <nav class="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
+                    <button onclick="switchTab('simulasi')" id="btn-simulasi" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 bg-amber-500 text-slate-950 shadow-md">
+                        <i class="fa-solid fa-sun mr-2"></i>Simulasi Solar Tracker
+                    </button>
+                    <button onclick="switchTab('bisnis')" id="btn-bisnis" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-200 transition-all duration-200">
+                        <i class="fa-solid fa-chart-pie mr-2"></i>Rencana Bisnis Energi
+                    </button>
+                    <button onclick="switchTab('teori')" id="btn-teori" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-200 transition-all duration-200">
+                        <i class="fa-solid fa-graduation-cap mr-2"></i>Penjelasan Logis PID
+                    </button>
+                </                </nav>
+            </div>
+        </header>
+
+        <!-- Main Content Container -->
+        <main class="flex-grow max-w-7xl w-full mx-auto p-4 md:p-6">
+            
+            <!-- ================= TAB 1: SIMULASI SOLAR TRACKER ================= -->
+            <section id="tab-simulasi" class="tab-content grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                <!-- Left Panel: PID Parameter Tuning & Solar Controls -->
+                <div class="lg:col-span-5 flex flex-col gap-6">
+                    <!-- PID Sliders Card -->
+                    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-semibold text-slate-200 flex items-center gap-2">
+                                <i class="fa-solid fa-sliders text-amber-500"></i> Setelan Motor Penggerak (PID)
+                            </h3>
+                            <span class="text-xs bg-amber-500/10 text-amber-400 px-2 py-1 rounded-md border border-amber-500/20 font-mono">Loop 60 FPS</span>
+                        </div>
+
+                        <!-- Sliders -->
+                        <div class="space-y-5">
+                            <!-- Proportional (Kp) -->
+                            <div>
+                                <div class="flex justify-between text-sm mb-1">
+                                    <label class="text-slate-300 font-medium flex items-center gap-1.5">
+                                        <span class="w-3 h-3 bg-red-500 rounded-full inline-block"></span>
+                                        Kecepatan Respon Motor (<span class="font-bold text-red-400">Kp</span>)
+                                    </label>
+                                    <span id="val-kp" class="font-mono text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">2.00</span>
+                                </div>
+                                <input type="range" id="slider-kp" min="0" max="8" step="0.05" value="2.00" 
+                                       class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-red-500">
+                                <p class="text-[11px] text-slate-400 mt-0.5">Makin besar Kp, motor makin bergegas berputar saat posisi matahari bergeser jauh.</p>
+                            </div>
+
+                            <!-- Integral (Ki) -->
+                            <div>
+                                <div class="flex justify-between text-sm mb-1">
+                                    <label class="text-slate-300 font-medium flex items-center gap-1.5">
+                                        <span class="w-3 h-3 bg-green-500 rounded-full inline-block"></span>
+                                        Pencegah Macet Engsel (<span class="font-bold text-green-400">Ki</span>)
+                                    </label>
+                                    <span id="val-ki" class="font-mono text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">0.05</span>
+                                </div>
+                                <input type="range" id="slider-ki" min="0" max="1" step="0.01" value="0.05" 
+                                       class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-green-500">
+                                <p class="text-[11px] text-slate-400 mt-0.5">Mengatasi hambatan karat/debu mekanis agar posisi panel benar-benar lurus 100% menghadap matahari.</p>
+                            </div>
+
+                            <!-- Derivative (Kd) -->
+                            <div>
+                                <div class="flex justify-between text-sm mb-1">
+                                    <label class="text-slate-300 font-medium flex items-center gap-1.5">
+                                        <span class="w-3 h-3 bg-blue-500 rounded-full inline-block"></span>
+                                        Peredam Getaran / Rem Motor (<span class="font-bold text-blue-400">Kd</span>)
+                                    </label>
+                                    <span id="val-kd" class="font-mono text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">1.80</span>
+                                </div>
+                                <input type="range" id="slider-kd" min="0" max="10" step="0.05" value="1.80" 
+                                       class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                                <p class="text-[11px] text-slate-400 mt-0.5">Merem putaran motor saat panel hampir sejajar agar tidak kebablasan bergetar bolak-balik.</p>
+                            </div>
+
+                            <!-- Setpoint (Manual Sun Control) -->
+                            <div class="pt-2 border-t border-slate-800">
+                                <div class="flex justify-between text-sm mb-1">
+                                    <label class="text-slate-300 font-medium flex items-center gap-1">
+                                        <i class="fa-solid fa-cloud-sun text-amber-400"></i> Geser Posisi Matahari Secara Manual
+                                    </label>
+                                    <span id="val-setpoint" class="font-mono text-amber-400 font-bold bg-slate-950 px-2 py-0.5 rounded border border-slate-800">0° (Tepat di Atas)</span>
+                                </div>
+                                <input type="range" id="slider-setpoint" min="-75" max="75" step="1" value="0" 
+                                       class="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500">
+                                <p class="text-[11px] text-slate-500 mt-1">Geser ke kiri untuk arah Timur (pagi), geser ke kanan untuk Barat (sore).</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tuning Presets Card -->
+                    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
+                        <h3 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">Pilihan Karakter Gerak Panel</h3>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="applyPreset(1.5, 0.0, 0.1)" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded-lg text-rose-400 border border-slate-700 flex flex-col items-center gap-1 transition">
+                                <span>Sangat Lambat & Lemah</span>
+                                <span class="text-[10px] text-slate-400 font-normal">Kp=1.50, Ki=0.00, Kd=0.10</span>
+                            </button>
+                            <button onclick="applyPreset(0.4, 0.0, 5.0)" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded-lg text-yellow-400 border border-slate-700 flex flex-col items-center gap-1 transition">
+                                <span>Kaku / Overdamped</span>
+                                <span class="text-[10px] text-slate-400 font-normal">Kp=0.40, Ki=0.00, Kd=5.00</span>
+                            </button>
+                            <button onclick="applyPreset(3.2, 0.08, 2.5)" class="px-3 py-2 bg-slate-800 hover:bg-amber-950 text-xs font-semibold rounded-lg text-amber-400 border border-slate-700 flex flex-col items-center gap-1 transition">
+                                <span>Melacak Mulus & Cepat (SaaS)</span>
+                                <span class="text-[10px] text-slate-400 font-normal">Kp=3.20, Ki=0.08, Kd=2.50</span>
+                            </button>
+                            <button onclick="applyPreset(7.0, 0.8, 0.0)" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded-lg text-purple-400 border border-slate-700 flex flex-col items-center gap-1 transition">
+                                <span>Motor Bergetar Rusak (Jitter)</span>
+                                <span class="text-[10px] text-slate-400 font-normal">Kp=7.00, Ki=0.80, Kd=0.00</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Simulation Controls (Disturbances) -->
+                    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
+                        <h3 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Simulasi Lingkungan & Cuaca</h3>
+                        <div class="flex gap-2">
+                            <button id="btn-wind" class="flex-1 py-2.5 px-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl text-xs transition shadow-lg flex items-center justify-center gap-1.5">
+                                <i class="fa-solid fa-wind animate-bounce"></i> Beri Guncangan Angin
+                            </button>
+                            <button id="btn-orbit" class="flex-1 py-2.5 px-3 bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded-xl text-xs transition shadow-lg flex items-center justify-center gap-1.5">
+                                <i class="fa-solid fa-clock"></i> <span id="orbit-btn-text">Siklus Otomatis: MATI</span>
+                            </button>
+                        </div>
+                        <button id="btn-reset" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-xs transition border border-slate-700">
+                            <i class="fa-solid fa-arrow-rotate-left mr-1"></i> Atur Ulang Posisi
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Right Panel: Visual Arena Panel Surya & Grafik -->
+                <div class="lg:col-span-7 flex flex-col gap-6">
+                    <!-- Sandbox Canvas Visualizer -->
+                    <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl relative flex flex-col">
+                        <!-- Top Info bar -->
+                        <div class="bg-slate-950 px-5 py-3 border-b border-slate-800 flex justify-between items-center">
+                            <div class="flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 bg-amber-500 rounded-full animate-ping"></span>
+                                <span class="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">Fisika Riil & Telemetri Sensor</span>
+                            </div>
+                            <div class="text-xs font-mono text-slate-400 flex gap-4">
+                                <span>Matahari: <strong id="sun-text" class="text-amber-500">0.0°</strong></span>
+                                <span>Sudut Panel: <strong id="panel-text" class="text-cyan-400">0.0°</strong></span>
+                            </div>
+                        </div>
+                        
+                        <!-- Environment Frame -->
+                        <div id="sky-bg" class="relative w-full h-[320px] bg-gradient-to-b from-sky-950 to-slate-950 overflow-hidden flex items-end justify-center pb-8 transition-colors duration-1000">
+                            <!-- Grid Background -->
+                            <div class="absolute inset-0 bg-[linear-gradient(to_right,#0f172a_1px,transparent_1px),linear-gradient(to_bottom,#0f172a_1px,transparent_1px)] bg-[size:20px_20px] opacity-20"></div>
+                            
+                            <!-- Wind Particle Lines (Toggled via JS) -->
+                            <div id="wind-particles" class="absolute inset-0 hidden pointer-events-none">
+                                <div class="wind-line wind-line-1"></div>
+                                <div class="wind-line wind-line-2"></div>
+                                <div class="wind-line wind-line-3"></div>
+                            </div>
+
+                            <!-- Ground Asphalt line -->
+                            <div class="absolute bottom-[32px] inset-x-0 h-[2px] bg-slate-700"></div>
+
+                            <!-- 1. MATAHARI (SETPOINT VISUAL) -->
+                            <div id="sun-object" class="absolute w-12 h-12 bg-amber-400 rounded-full border-4 border-yellow-200 shadow-[0_0_40px_rgba(251,191,36,0.8)] flex items-center justify-center transition-all duration-75" style="bottom: 210px; left: calc(50% - 24px); z-index: 10;">
+                                <i class="fa-solid fa-sun text-slate-950 text-lg animate-spin-slow"></i>
+                            </div>
+
+                            <!-- Sinar Cahaya Matahari (Garis putus-putus ke Panel) -->
+                            <svg class="absolute inset-0 w-full h-full pointer-events-none" style="z-index: 5;">
+                                <line id="light-beam" x1="50%" y1="76" x2="50%" y2="230" stroke="rgba(251,191,36,0.3)" stroke-width="4" stroke-dasharray="8 6"/>
+                            </svg>
+
+                            <!-- 2. PANEL SURYA (YANG DIKONTROL OLEH PID) -->
+                            <div class="relative flex flex-col items-center justify-center" style="z-index: 10;">
+                                
+                                <!-- Tiang Pondasi Kokoh -->
+                                <div class="w-4 h-24 bg-gradient-to-r from-slate-700 to-slate-600 border border-slate-600 shadow-lg rounded-t"></div>
+                                
+                                <!-- Sendi Putar Motor / Engsel (Pivot Center) -->
+                                <div class="absolute w-8 h-8 bg-slate-800 rounded-full border-2 border-slate-500 shadow-md flex items-center justify-center" style="bottom: 80px;">
+                                    <!-- Spinning Cogs to represent Motor Gear Action -->
+                                    <i id="motor-cog" class="fa-solid fa-gear text-slate-400 text-xs transition-transform duration-75"></i>
+                                </div>
+
+                                <!-- Piringan Panel Surya yang berotasi -->
+                                <div id="solar-panel-rotate" class="absolute w-52 h-10 transition-transform duration-75 origin-center" style="bottom: 76px; transform: rotate(0deg);">
+                                    <!-- Kerangka Panel -->
+                                    <div class="w-full h-full bg-slate-800 border-2 border-slate-400 rounded-md shadow-2xl flex p-1 relative">
+                                        
+                                        <!-- Sel Fotovoltaik Biru (Silicon Wafers) -->
+                                        <div class="w-1/3 h-full bg-blue-900 border-r border-slate-700 flex flex-col justify-around p-0.5">
+                                            <div class="h-[2px] bg-cyan-400/30"></div>
+                                            <div class="h-[2px] bg-cyan-400/30"></div>
+                                        </div>
+                                        <div class="w-1/3 h-full bg-blue-900 border-r border-slate-700 flex flex-col justify-around p-0.5">
+                                            <div class="h-[2px] bg-cyan-400/30"></div>
+                                            <div class="h-[2px] bg-cyan-400/30"></div>
+                                        </div>
+                                        <div class="w-1/3 h-full bg-blue-900 flex flex-col justify-around p-0.5">
+                                            <div class="h-[2px] bg-cyan-400/30"></div>
+                                            <div class="h-[2px] bg-cyan-400/30"></div>
+                                        </div>
+
+                                        <!-- Panah Sensor Samping Kiri/Kanan LDR dengan status LED menyala -->
+                                        <div id="ldr-left-node" class="absolute -left-3 top-1/2 -translate-y-1/2 w-3.5 h-5 bg-slate-900 border border-slate-600 rounded flex flex-col items-center justify-center text-[7px] font-mono text-amber-400">
+                                            L
+                                            <span id="ldr-left-led" class="w-1.5 h-1.5 bg-green-500 rounded-full mt-0.5"></span>
+                                        </div>
+                                        <div id="ldr-right-node" class="absolute -right-3 top-1/2 -translate-y-1/2 w-3.5 h-5 bg-slate-900 border border-slate-600 rounded flex flex-col items-center justify-center text-[7px] font-mono text-amber-400">
+                                            R
+                                            <span id="ldr-right-led" class="w-1.5 h-1.5 bg-green-500 rounded-full mt-0.5"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Dashboard Ekonomi & Efisiensi panel di pojok kiri atas -->
+                            <div class="absolute left-6 top-4 bg-slate-900/95 border border-slate-800 rounded-xl p-3 flex flex-col gap-1.5 shadow-2xl z-20">
+                                <div>
+                                    <span class="text-[9px] uppercase tracking-wider text-slate-400 block">Efisiensi Daya</span>
+                                    <span id="power-efficiency-text" class="text-xl font-black font-mono text-emerald-400">100.0%</span>
+                                </div>
+                                <div class="w-28 bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
+                                    <div id="power-progress-bar" class="bg-gradient-to-r from-emerald-500 to-teal-400 h-full transition-all duration-150" style="width: 100%;"></div>
+                                </div>
+                                <div class="text-[10px] text-slate-400 font-mono">
+                                    Listrik: <strong id="watts-text" class="text-yellow-400">350.0 W</strong>
+                                </div>
+                                <!-- Live LDR Reading Dashboard -->
+                                <div class="mt-1 pt-1.5 border-t border-slate-800 text-[9px] text-slate-400 space-y-1">
+                                    <div class="flex justify-between items-center gap-4">
+                                        <span>Sensor L (Kiri):</span>
+                                        <span id="ldr-left-val" class="font-mono text-amber-400">100%</span>
+                                    </div>
+                                    <div class="flex justify-between items-center gap-4">
+                                        <span>Sensor R (Kanan):</span>
+                                        <span id="ldr-right-val" class="font-mono text-amber-400">100%</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Motor Torque Output & Wind Force Gauge (Right Corner) -->
+                            <div class="absolute right-6 top-4 bg-slate-900/95 border border-slate-800 rounded-xl p-3 flex flex-col gap-2 shadow-2xl z-20 w-44">
+                                <div>
+                                    <span class="text-[9px] uppercase tracking-wider text-slate-400 block">Kerja Motor Penggerak</span>
+                                    <span id="torque-text" class="text-xs font-black font-mono text-cyan-400 block mt-0.5">DIAM (0V)</span>
+                                    <span class="text-[9px] text-rose-400" id="wear-warning"></span>
+                                </div>
+                                
+                                <!-- Wind Speed Gauge -->
+                                <div class="pt-1.5 border-t border-slate-800">
+                                    <span class="text-[9px] uppercase tracking-wider text-slate-400 block">Kekuatan Angin</span>
+                                    <div class="flex items-center gap-1.5 mt-0.5">
+                                        <!-- Rotating Anemometer Icon -->
+                                        <i id="anemometer-icon" class="fa-solid fa-fan text-slate-400 text-xs"></i>
+                                        <span id="wind-speed-val" class="text-xs font-bold font-mono text-slate-300">0.0 km/jam</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Wind Alert Overlay -->
+                            <div id="wind-alert" class="absolute top-4 left-1/2 transform -translate-x-1/2 bg-blue-600/95 text-white text-xs px-3 py-1.5 rounded-full font-bold shadow-lg flex items-center gap-1.5 opacity-0 transition-all duration-300 pointer-events-none z-30">
+                                <i class="fa-solid fa-wind animate-bounce"></i> ANGIN KENCANG: PID MELAWAN GAYA BEBAN!
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Live Graph Card -->
+                    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
+                        <h3 class="text-sm font-semibold text-slate-300 mb-3 flex justify-between items-center">
+                            <span><i class="fa-solid fa-chart-line mr-1 text-amber-500"></i> Kurva Sudut Matahari (Biru) vs Sudut Panel Surya (Pink)</span>
+                            <span class="text-[11px] text-slate-500">Ideal = Dua Garis Berimpitan Sempurna</span>
+                        </h3>
+                        <div class="h-[180px]">
+                            <canvas id="pidChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+            </section>
+
+            <!-- ================= TAB 2: RENCANA BISNIS MEDIS ================= -->
+            <section id="tab-bisnis" class="tab-content hidden space-y-8">
+                <!-- Business Header -->
+                <div class="bg-gradient-to-r from-amber-950 via-orange-900 to-slate-900 border border-amber-700/30 rounded-3xl p-6 md:p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 shadow-xl">
+                    <div class="space-y-2">
+                        <span class="bg-amber-500/20 text-amber-300 text-xs px-3 py-1 rounded-full font-semibold border border-amber-500/30">Materi Tugas KBK: Energi Hijau & Rekayasa Otomatisasi</span>
+                        <h2 class="text-3xl font-extrabold text-white">SunSync IoT</h2>
+                        <p class="text-slate-300 max-w-2xl text-sm leading-relaxed">
+                            Kami mengomersialisasikan algoritma kontrol PID adaptif menjadi controller hardware pintar (*embedded module*) yang dirancang untuk merombak panel surya statis konvensional menjadi pelacak otomatis berefisiensi tinggi.
+                        </p>
+                    </div>
+                    <div class="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-center shrink-0 w-full md:w-auto">
+                        <p class="text-xs text-slate-400">Efisiensi Tambahan Energi</p>
+                        <p class="text-3xl font-black text-amber-400">+35%</p>
+                        <p class="text-[10px] text-slate-500">Lebih Banyak kWh Listrik Terjual per Hari</p>
+                    </div>
+                </div>
+
+                <!-- Business Plan Details / Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <!-- Card 1: Problem & Solution -->
+                    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-md">
+                        <div class="bg-rose-500/10 text-rose-400 w-12 h-12 rounded-xl flex items-center justify-center border border-rose-500/20 text-xl">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                        </div>
+                        <h3 class="text-lg font-bold text-slate-100">1. Problem & Solusi</h3>
+                        <div class="space-y-3 text-sm text-slate-400 leading-relaxed">
+                            <p>
+                                <strong class="text-slate-200">Masalah:</strong> Lebih dari 85% panel surya industri yang terpasang saat ini bersifat statis (diam menghadap langit). Hal ini menyebabkan pemborosan penyerapan sinar matahari di pagi hari dan sore hari. Sistem tracker mekanis komersial yang ada sering rusak karena angin kencang dan putaran motor yang bergetar tidak terkendali (*high structural wear*).
+                            </p>
+                            <p>
+                                <strong class="text-slate-200">Solusi SunSync:</strong> Kami membuat modul kontroler **SunSync PID**. Algoritma cerdas ini mengolah data dari dua sensor cahaya kecil (LDR) di kiri-kanan panel, dan memerintahkan motor servo untuk menyelaraskan sudut panel secara halus. Algoritma ini memiliki peredam khusus (Kd) sehingga ketika ada angin kencang atau bayangan awan melintas, motor tidak bergoyang panik, menghemat masa pakai roda gigi motor hingga 3 kali lipat.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Card 2: Model Bisnis & Pendapatan -->
+                    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-md">
+                        <div class="bg-amber-500/10 text-amber-400 w-12 h-12 rounded-xl flex items-center justify-center border border-amber-500/20 text-xl">
+                            <i class="fa-solid fa-arrows-spin"></i>
+                        </div>
+                        <h3 class="text-lg font-bold text-slate-100">2. Model Bisnis (B2B SaaS)</h3>
+                        <div class="space-y-3 text-sm text-slate-400 leading-relaxed">
+                            <p>
+                                Pendapatan difokuskan dari pengelola kebun panel surya (Solar Farm) komersial skala besar:
+                            </p>
+                            <ul class="space-y-2 list-disc list-inside">
+                                <li><strong class="text-slate-200">Penjualan Modul Hardware:</strong> Penjualan lisensi hardware chip kontroler PID per unit panel surya yang dimodifikasi.</li>
+                                <li><strong class="text-slate-200">SaaS Cloud Telemetry Dashboard:</strong> Manajemen berbasis komputasi awan. Sistem melacak degradasi motor berdasarkan getaran PID yang dilaporkan sensor, mendeteksi kerusakan roda gigi *sebelum* motor benar-benar terbakar (Predictive Maintenance).</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Card 3: Target Pasar -->
+                    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-md">
+                        <div class="bg-blue-500/10 text-blue-400 w-12 h-12 rounded-xl flex items-center justify-center border border-blue-500/20 text-xl">
+                            <i class="fa-solid fa-bullseye"></i>
+                        </div>
+                        <h3 class="text-lg font-bold text-slate-100">3. Analisis Kelayakan Pasar</h3>
+                        <div class="space-y-3 text-sm text-slate-400 leading-relaxed">
+                            <p>
+                                <strong class="text-slate-200">Target Utama:</strong> Industri perkebunan kelapa sawit (untuk tandon daya mandiri), pembangkit listrik tenaga surya nasional, dan gedung perkantoran ramah lingkungan.
+                            </p>
+                            <p>
+                                <strong class="text-slate-200">Alasan Ini Sangat Masuk Akal:</strong> Peningkatan efisiensi sebesar **35%** berarti waktu balik modal (*Payback Period*) pemasangan panel surya berkurang dari semula 7 tahun menjadi hanya 4.5 tahun! Hal ini membuat proyek retrofit SunSync sangat menggiurkan bagi para investor energi hijau.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Business Model Canvas (BMC) mini-board -->
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-md">
+                    <h3 class="text-xl font-bold text-slate-200 mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-table-cells-large text-amber-500"></i> Lean Canvas Bisnis: SunSync IoT
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
+                        <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1">
+                            <h4 class="font-bold text-amber-400 uppercase tracking-wide">Key Partners</h4>
+                            <p class="text-slate-400">Pemasok Panel Surya Lokal, Vendor Komponen Motor Brushless, Lembaga Sertifikasi Standar Efisiensi Energi Terbarukan.</p>
+                        </div>
+                        <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1">
+                            <h4 class="font-bold text-amber-400 uppercase tracking-wide">Value Proposition</h4>
+                            <p class="text-slate-400">Mengoptimalkan pemanenan energi surya hingga 35%, serta meminimalisir getaran merusak pada struktur rangka besi panel surya akibat hembusan angin.</p>
+                        </div>
+                        <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1">
+                            <h4 class="font-bold text-amber-400 uppercase tracking-wide">Customer Relations</h4>
+                            <p class="text-slate-400">Garansi Pemasangan & Kalibrasi PID Mandiri 2 Tahun, Layanan Deteksi Dini Kerusakan Motor Terintegrasi Dashboard.</p>
+                        </div>
+                        <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1">
+                            <h4 class="font-bold text-amber-400 uppercase tracking-wide">Revenue Channels</h4>
+                            <p class="text-slate-400">Penjualan Paket Chip Controller IoT, Paket Langganan SaaS Deteksi Kesehatan Motor Bulanan.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ================= TAB 3: PENJELASAN INSTAN PID ================= -->
+            <section id="tab-teori" class="tab-content hidden max-w-4xl mx-auto space-y-6">
+                <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 space-y-6 shadow-xl">
+                    <h2 class="text-2xl font-extrabold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-circle-question text-amber-500"></i> Mengapa Panel Surya Butuh PID untuk Melacak Matahari?
+                    </h2>
+                    
+                    <p class="text-slate-300 text-sm leading-relaxed">
+                        Bayangkan Anda sedang berdiri memegang panel surya dan bertugas menjaganya agar selalu menghadap ke arah wajah seseorang yang sedang berjalan dari kiri ke kanan. Inilah cara otak Anda memproses kendali tersebut, yang kemudian ditiru oleh algoritma PID kami:
+                    </p>
+
+                    <div class="space-y-4">
+                        <!-- P -->
+                        <div class="p-4 bg-slate-950 rounded-xl border-l-4 border-red-500">
+                            <h3 class="text-md font-bold text-red-400">Kp (Proportional) - Koreksi Jarak Instan</h3>
+                            <p class="text-slate-400 text-xs mt-1 leading-relaxed">
+                                Jika matahari tiba-tiba bergeser **15 derajat ke kanan**, sensor kiri-kanan akan menyadarinya. Kp mendeteksi kesalahan sudut ini dan menginstruksikan motor untuk berputar kencang ke arah kanan guna menyejajarkan panel. Semakin jauh matahari melesat, semakin kencang motor melaju.
+                            </p>
+                        </div>
+
+                        <!-- I -->
+                        <div class="p-4 bg-slate-950 rounded-xl border-l-4 border-green-500">
+                            <h3 class="text-md font-bold text-green-400">Ki (Integral) - Mengatasi Engsel Seret</h3>
+                            <p class="text-slate-400 text-xs mt-1 leading-relaxed">
+                                Di lapangan berdebu, engsel mekanis panel surya sering kali berkarat atau seret. Akibatnya, ada sisa kesalahan kecil (misal miring **1 derajat** dari matahari) yang tidak mampu digerakkan oleh motor karena gaya gesek karat tersebut (*Steady-state Error*). Komponen Ki mengumpulkan akumulasi kesalahan kecil ini dari waktu ke waktu, lalu secara bertahap menaikkan tegangan listrik ke motor hingga akhirnya motor berhasil menembus hambatan karat dan panel tegak lurus sempurna.
+                            </p>
+                        </div>
+
+                        <!-- D -->
+                        <div class="p-4 bg-slate-950 rounded-xl border-l-4 border-blue-500">
+                            <h3 class="text-md font-bold text-blue-400">Kd (Derivative) - Rem Otomatis Pencegah Getaran</h3>
+                            <p class="text-slate-400 text-xs mt-1 leading-relaxed">
+                                Saat motor melaju kencang untuk menyamai posisi matahari, panel memiliki momentum berat yang besar. Jika tidak ada rem, panel akan meluncur melampaui posisi matahari (*overshoot*) lalu bergerak balik ke kiri, ke kanan lagi, dan akhirnya bergetar panik. Kd memprediksi kecepatan pergerakan panel dan bertindak sebagai "rem halus" sesaat sebelum panel sejajar dengan matahari, sehingga panel berhenti dengan sangat presisi dan tenang.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 text-center font-mono text-xs">
+                        <p class="text-amber-400 mb-1">Model Persamaan Matematika Kontrol Solar Tracker:</p>
+                        <span class="text-slate-200 block text-sm overflow-x-auto py-2">
+                            Tegangan Motor u(t) = Kp &bull; &theta;_error(t) + Ki &bull; &int; &theta;_error(&tau;) d&tau; + Kd &bull; [d&theta;_error(t) / dt]
+                        </span>
+                        <p class="text-slate-500 text-[10px] mt-1">Sistem mikroprosesor memproses persentase arah sinar LDR sebanyak 60 kali per detik.</p>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+
+        <!-- Footer -->
+        <footer class="bg-slate-900 border-t border-slate-800 py-6 px-6 mt-12 text-center text-xs text-slate-400">
+            <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+                <p>&copy; 2026 SunSync PID. Proyek Tugas KBK - Ahmad Irfan Fardani (EK3B - 3.32.23.1.02).</p>
+                <div class="flex gap-4">
+                    <a href="#" class="hover:text-amber-400 transition">GitHub</a>
+                    <a href="#" class="hover:text-amber-400 transition">Dokumentasi API</a>
+                    <a href="#" class="hover:text-amber-400 transition">Hubungi Tim</a>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- JavaScript Game Logic & PID Physics Simulation -->
+    <script>
+        // Mulai simulasi secara instan saat halaman selesai dimuat browser
+        window.onload = function () {
+            initSimulationEngine();
+        };
+
+        // Pembungkus seluruh mesin simulasi agar terisolasi dari global browser debugger
+        function initSimulationEngine() {
+            // Tab switching logic
+            window.switchTab = function(tabName) {
+                document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+                document.getElementById('tab-' + tabName).classList.remove('hidden');
+                
+                document.querySelectorAll('.tab-btn').forEach(btn => {
+                    btn.classList.remove('bg-amber-500', 'text-slate-950', 'shadow-md');
+                    btn.classList.add('text-slate-400');
+                });
+                
+                const activeBtn = document.getElementById('btn-' + tabName);
+                activeBtn.classList.remove('text-slate-400');
+                activeBtn.classList.add('bg-amber-500', 'text-slate-950', 'shadow-md');
+            }
+
+            // --- PID SOLAR TRACKER SIMULATION ---
+            const sliderKp = document.getElementById('slider-kp');
+            const sliderKi = document.getElementById('slider-ki');
+            const sliderKd = document.getElementById('slider-kd');
+            const sliderSetpoint = document.getElementById('slider-setpoint');
+
+            const valKp = document.getElementById('val-kp');
+            const valKi = document.getElementById('val-ki');
+            const valKd = document.getElementById('val-kd');
+            const valSetpoint = document.getElementById('val-setpoint');
+
+            const sunObject = document.getElementById('sun-object');
+            const lightBeam = document.getElementById('light-beam');
+            const solarPanelRotate = document.getElementById('solar-panel-rotate');
+            const skyBg = document.getElementById('sky-bg');
+            
+            const powerEfficiencyText = document.getElementById('power-efficiency-text');
+            const powerProgressBar = document.getElementById('power-progress-bar');
+            const wattsText = document.getElementById('watts-text');
+            const torqueText = document.getElementById('torque-text');
+            const wearWarning = document.getElementById('wear-warning');
+            const windAlert = document.getElementById('wind-alert');
+            const windParticles = document.getElementById('wind-particles');
+            const windSpeedVal = document.getElementById('wind-speed-val');
+            const anemometerIcon = document.getElementById('anemometer-icon');
+            const motorCog = document.getElementById('motor-cog');
+
+            const ldrLeftVal = document.getElementById('ldr-left-val');
+            const ldrRightVal = document.getElementById('ldr-right-val');
+            const ldrLeftLed = document.getElementById('ldr-left-led');
+            const ldrRightLed = document.getElementById('ldr-right-led');
+
+            const sunText = document.getElementById('sun-text');
+            const panelText = document.getElementById('panel-text');
+
+            const btnWind = document.getElementById('btn-wind');
+            const btnOrbit = document.getElementById('btn-orbit');
+            const btnReset = document.getElementById('btn-reset');
+
+            const dt = 0.016;                 
+            let sunAngle = 0.0;               
+            let targetSunAngle = 0.0;         
+            let panelAngle = 35.0;            
+            let panelOmega = 0.0;             
+            let isOrbitActive = false;        
+            let orbitTime = 0.0;
+
+            let isWindActive = false;         
+            let windTime = 0.0;
+            let windForce = 0.0;              
+            let visualWindSpeed = 0.0;        
+            let anemometerRotation = 0;       
+            let motorCogRotation = 0;
+
+            let totalDirectionalChanges = 0;
+            let lastTorqueDirection = 0;
+            let jitterCounter = 0;
+
+            let kp = parseFloat(sliderKp.value);
+            let ki = parseFloat(sliderKi.value);
+            let kd = parseFloat(sliderKd.value);
+
+            let integralError = 0.0;
+            let lastError = 0.0;
+
+            const ctx = document.getElementById('pidChart').getContext('2d');
+            let chartDataLimit = 150;
+            let chartLabels = Array.from({length: chartDataLimit}, (_, i) => '');
+            let sunHistory = Array(chartDataLimit).fill(0);
+            let panelHistory = Array(chartDataLimit).fill(panelAngle);
+
+            const pidChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: chartLabels,
+                    datasets: [
+                        {
+                            label: 'Sudut Sinar Matahari (Setpoint)',
+                            data: sunHistory,
+                            borderColor: 'rgb(245, 158, 11)', 
+                            borderWidth: 1.5,
+                            borderDash: [3, 3],
+                            fill: false,
+                            pointRadius: 0
+                        },
+                        {
+                            label: 'Sudut Panel Surya Aktual',
+                            data: panelHistory,
+                            borderColor: 'rgb(244, 63, 94)', 
+                            borderWidth: 2.5,
+                            fill: false,
+                            pointRadius: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#cbd5e1', 
+                                boxWidth: 12,
+                                font: { size: 10 }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { display: false },
+                        y: {
+                            min: -80,
+                            max: 80,
+                            ticks: { color: '#64748b', font: { size: 10 } },
+                            grid: { color: '#1e293b' }
+                        }
+                    },
+                    animation: false
+                }
+            });
+
+            function updateUIControls() {
+                kp = parseFloat(sliderKp.value);
+                ki = parseFloat(sliderKi.value);
+                kd = parseFloat(sliderKd.value);
+                
+                if (!isOrbitActive) {
+                    targetSunAngle = parseFloat(sliderSetpoint.value);
+                }
+
+                valKp.textContent = kp.toFixed(2);
+                valKi.textContent = ki.toFixed(2);
+                valKd.textContent = kd.toFixed(2);
+                valSetpoint.textContent = targetSunAngle.toFixed(1) + "°";
+            }
+
+            window.applyPreset = function(p, i, d) {
+                sliderKp.value = p;
+                sliderKi.value = i;
+                sliderKd.value = d;
+                updateUIControls();
+            };
+
+            function resetSimulation() {
+                panelAngle = 35.0;
+                panelOmega = 0.0;
+                sunAngle = 0.0;
+                targetSunAngle = 0.0;
+                sliderSetpoint.value = 0;
+                
+                integralError = 0.0;
+                lastError = 0.0;
+
+                isOrbitActive = false;
+                orbitTime = 0.0;
+                btnOrbit.className = "flex-1 py-2.5 px-3 bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded-xl text-xs transition shadow-lg flex items-center justify-center gap-1.5";
+                document.getElementById('orbit-btn-text').textContent = "Siklus Otomatis: MATI";
+
+                isWindActive = false;
+                windTime = 0.0;
+                windForce = 0.0;
+                visualWindSpeed = 0.0;
+                windParticles.classList.add('hidden');
+                windAlert.style.opacity = '0';
+                windSpeedVal.textContent = "0.0 km/jam";
+
+                totalDirectionalChanges = 0;
+                jitterCounter = 0;
+                wearWarning.textContent = "";
+
+                sunHistory.fill(0);
+                panelHistory.fill(panelAngle);
+                pidChart.update();
+                updateUIControls();
+            }
+
+            btnWind.addEventListener('click', () => {
+                if (isWindActive) return;
+
+                isWindActive = true;
+                windTime = 0.0;
+                windAlert.style.opacity = '1';
+                windParticles.classList.remove('hidden');
+                
+                visualWindSpeed = 55.4 + Math.random() * 20;
+
+                setTimeout(() => {
+                    isWindActive = false;
+                    windAlert.style.opacity = '0';
+                    windParticles.classList.add('hidden');
+                    windForce = 0.0;
+                    visualWindSpeed = 0.0;
+                    windSpeedVal.textContent = "0.0 km/jam";
+                }, 3500);
+            });
+
+            btnOrbit.addEventListener('click', () => {
+                isOrbitActive = !isOrbitActive;
+                if (isOrbitActive) {
+                    btnOrbit.className = "flex-1 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl text-xs transition shadow-lg flex items-center justify-center gap-1.5";
+                    document.getElementById('orbit-btn-text').textContent = "Siklus Otomatis: AKTIF";
+                } else {
+                    btnOrbit.className = "flex-1 py-2.5 px-3 bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded-xl text-xs transition shadow-lg flex items-center justify-center gap-1.5";
+                    document.getElementById('orbit-btn-text').textContent = "Siklus Otomatis: MATI";
+                    targetSunAngle = sunAngle;
+                    sliderSetpoint.value = Math.round(sunAngle);
+                }
+            });
+
+            btnReset.addEventListener('click', resetSimulation);
+
+            sliderKp.addEventListener('input', updateUIControls);
+            sliderKi.addEventListener('input', updateUIControls);
+            sliderKd.addEventListener('input', updateUIControls);
+            sliderSetpoint.addEventListener('input', updateUIControls);
+
+            function simulationStep() {
+                if (isOrbitActive) {
+                    orbitTime += dt * 0.4;
+                    sunAngle = Math.sin(orbitTime) * 70.0;
+                    sliderSetpoint.value = Math.round(sunAngle);
+                    valSetpoint.textContent = sunAngle.toFixed(1) + "°";
+                } else {
+                    sunAngle += (targetSunAngle - sunAngle) * 0.1;
+                }
+                sunText.textContent = sunAngle.toFixed(1) + "°";
+
+                let orbitRadius = 160;
+                let angleRad = (90 - sunAngle) * Math.PI / 180; 
+                let sunX = Math.cos(angleRad) * orbitRadius;
+                let sunY = Math.sin(angleRad) * orbitRadius;
+                
+                sunObject.style.left = `calc(50% + ${sunX}px - 24px)`;
+                sunObject.style.bottom = `${sunY + 70}px`;
+
+                let skyLuminance = Math.cos(sunAngle * Math.PI / 180); 
+                let skyR = Math.round(15 + skyLuminance * 30);
+                let skyG = Math.round(23 + skyLuminance * 80);
+                let skyB = Math.round(42 + skyLuminance * 130);
+                skyBg.style.backgroundImage = `radial-gradient(circle at 50% 30%, rgb(${skyR + 20}, ${skyG + 40}, ${skyB + 60}) 0%, rgb(${skyR}, ${skyG}, ${skyB}) 100%)`;
+
+                if (isWindActive) {
+                    windTime += dt * 6.0;
+                    windForce = 15.0 + Math.sin(windTime) * 12.0 + (Math.random() - 0.5) * 6.0;
+                    
+                    let instantSpeed = visualWindSpeed + Math.sin(windTime * 2) * 5;
+                    windSpeedVal.textContent = instantSpeed.toFixed(1) + " km/jam";
+
+                    anemometerRotation += instantSpeed * 0.4;
+                    anemometerIcon.style.transform = `rotate(${anemometerRotation}deg)`;
+                } else {
+                    windForce = 0.0;
+                    anemometerIcon.style.transform = 'rotate(0deg)';
+                }
+
+                let error = sunAngle - panelAngle;
+                let pOut = kp * error;
+
+                if (Math.abs(error) < 25.0) {
+                    integralError += error * dt;
+                }
+                integralError = Math.max(-15, Math.min(15, integralError));
+                let iOut = ki * integralError;
+
+                let derivative = (error - lastError) / dt;
+                let dOut = kd * derivative;
+
+                lastError = error;
+
+                let motorVoltage = pOut + iOut + dOut;
+                motorVoltage = Math.max(-100.0, Math.min(100.0, motorVoltage)); 
+
+                if (Math.abs(motorVoltage) > 1.0) {
+                    motorCogRotation += motorVoltage * 0.15;
+                    motorCog.style.transform = `rotate(${motorCogRotation}deg)`;
+                }
+
+                let currentTorqueDirection = Math.sign(motorVoltage);
+                if (currentTorqueDirection !== lastTorqueDirection && Math.abs(motorVoltage) > 1.5) {
+                    totalDirectionalChanges++;
+                    lastTorqueDirection = currentTorqueDirection;
+                }
+
+                if (totalDirectionalChanges > 0) {
+                    jitterCounter += (totalDirectionalChanges > 12) ? 1 : -0.1;
+                    jitterCounter = Math.max(0, jitterCounter);
+                    totalDirectionalChanges = 0; 
+                }
+
+                let roundedVoltage = Math.round(motorVoltage);
+                if (Math.abs(roundedVoltage) > 1) {
+                    torqueText.textContent = roundedVoltage > 0 ? `SEARAH (+${roundedVoltage}V)` : `BERLAWAN (${roundedVoltage}V)`;
+                    torqueText.className = "text-xs font-black font-mono text-cyan-400 mt-1 block";
+                } else {
+                    torqueText.textContent = "DIAM (0V)";
+                    torqueText.className = "text-xs font-black font-mono text-slate-400 mt-1 block";
+                }
+
+                if (jitterCounter > 40) {
+                    wearWarning.innerHTML = "<i class='fa-solid fa-triangle-exclamation animate-bounce'></i> JITTER PARAH!<br>Motor cepat aus.";
+                    wearWarning.className = "text-[9px] text-red-400 mt-1 text-center font-bold leading-tight block";
+                } else if (jitterCounter > 15) {
+                    wearWarning.innerHTML = "<i class='fa-solid fa-triangle-exclamation'></i> Motor Bergetar.";
+                    wearWarning.className = "text-[9px] text-yellow-400 mt-1 text-center leading-tight block";
+                } else {
+                    wearWarning.textContent = "Motor Adem (Awet)";
+                    wearWarning.className = "text-[9px] text-emerald-400 mt-1 font-semibold block";
+                }
+
+                let bearingFriction = 0.95 * panelOmega;
+                let alpha = (motorVoltage * 3.8 - bearingFriction + windForce); 
+
+                panelOmega += alpha * dt;
+                panelAngle += panelOmega * dt;
+
+                if (panelAngle > 78.0) { panelAngle = 78.0; panelOmega = 0; }
+                if (panelAngle < -78.0) { panelAngle = -78.0; panelOmega = 0; }
+
+                let ldrLeftIntensity = Math.max(0, Math.round(100 - Math.abs((sunAngle - 15) - panelAngle) * 3));
+                let ldrRightIntensity = Math.max(0, Math.round(100 - Math.abs((sunAngle + 15) - panelAngle) * 3));
+
+                ldrLeftVal.textContent = ldrLeftIntensity + "%";
+                ldrRightVal.textContent = ldrRightIntensity + "%";
+
+                ldrLeftLed.style.opacity = 0.2 + (ldrLeftIntensity / 100) * 0.8;
+                ldrRightLed.style.opacity = 0.2 + (ldrRightIntensity / 100) * 0.8;
+
+                let angleDifference = Math.abs(sunAngle - panelAngle);
+                let efficiency = Math.cos(angleDifference * Math.PI / 180);
+                efficiency = Math.max(0.0, efficiency);
+                
+                let efficiencyPercentage = efficiency * 100.0;
+                let generatedWatts = efficiency * 350.0; 
+
+                powerEfficiencyText.textContent = efficiencyPercentage.toFixed(1) + "%";
+                powerProgressBar.style.width = `${efficiencyPercentage}%`;
+                wattsText.textContent = generatedWatts.toFixed(1) + " W";
+
+                if (efficiencyPercentage > 95.0) {
+                    powerEfficiencyText.className = "text-xl font-black font-mono text-emerald-400 animate-pulse";
+                } else if (efficiencyPercentage > 70.0) {
+                    powerEfficiencyText.className = "text-xl font-black font-mono text-teal-400";
+                } else {
+                    powerEfficiencyText.className = "text-xl font-black font-mono text-rose-500";
+                }
+
+                solarPanelRotate.style.transform = `rotate(${panelAngle}deg)`;
+                panelText.textContent = panelAngle.toFixed(1) + "°";
+
+                if (Math.abs(error) < 1.0) {
+                    panelText.className = "text-emerald-400 font-bold";
+                } else if (Math.abs(error) < 5.0) {
+                    panelText.className = "text-cyan-400 font-semibold";
+                } else {
+                    panelText.className = "text-rose-500 font-bold animate-pulse";
+                }
+
+                let rect = skyBg.getBoundingClientRect();
+                let sunRect = sunObject.getBoundingClientRect();
+                
+                let beamX1 = sunRect.left + 24 - rect.left;
+                let beamY1 = sunRect.top + 24 - rect.top;
+                let beamX2 = rect.width / 2;
+                let beamY2 = 240; 
+
+                lightBeam.setAttribute('x1', beamX1);
+                lightBeam.setAttribute('y1', beamY1);
+                lightBeam.setAttribute('x2', beamX2);
+                lightBeam.setAttribute('y2', beamY2);
+                lightBeam.setAttribute('stroke', `rgba(251, 191, 36, ${0.1 + efficiency * 0.4})`);
+
+                sunHistory.push(sunAngle);
+                sunHistory.shift();
+
+                panelHistory.push(panelAngle);
+                panelHistory.shift();
+
+                pidChart.update('none'); 
+
+                requestAnimationFrame(simulationStep);
+            }
+
+            updateUIControls();
+            resetSimulation();
+            simulationStep();
+        }
+    </script>
+</body>
+</html>
